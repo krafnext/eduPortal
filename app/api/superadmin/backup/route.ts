@@ -23,6 +23,8 @@ import { mkdir } from "fs/promises";
 import { createGzip } from "zlib";
 import path from "path";
 
+export const dynamic = "force-dynamic";
+
 export const runtime = "nodejs";
 
 const BACKUP_DIR = process.env.BACKUP_DIR ?? path.join(process.cwd(), "backups");

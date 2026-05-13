@@ -3,6 +3,8 @@ import { requireSuperAdmin } from "@/lib/superadmin-guard";
 import { promises as dns } from "dns";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const schema = z.object({
   domain: z.string().min(3),
   token: z.string().min(10),

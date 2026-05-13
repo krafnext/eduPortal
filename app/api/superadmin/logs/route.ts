@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSuperAdmin } from "@/lib/superadmin-guard";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const { error } = await requireSuperAdmin();
   if (error) return error;

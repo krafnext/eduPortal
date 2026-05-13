@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const rowSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),

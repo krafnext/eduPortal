@@ -9,6 +9,8 @@ import bcrypt from "bcryptjs";
 import { randomUUID } from "crypto";
 import path from "path";
 
+export const dynamic = "force-dynamic";
+
 export const maxDuration = 60;
 
 const schema = z.object({

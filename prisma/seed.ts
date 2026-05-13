@@ -24,8 +24,8 @@ function workingDays(from: Date, to: Date): Date[] {
 
 async function main() {
   // ── idempotency guard ────────────────────────────────────────────────────
-  const existingCount = await prisma.student.count();
-  if (existingCount >= 150) {
+  const [feeCount, resultCount] = await Promise.all([prisma.feeStructure.count(), prisma.examResult.count()]);
+  if (feeCount >= 24 && resultCount >= 1000) {
     console.log("✅ Full seed already present — skipping.");
     return;
   }
@@ -176,8 +176,8 @@ async function main() {
       create: { name: td.name, email: td.email, password: pw, role: UserRole.TEACHER, phone: `+91-${rng(7000000000, 9999999999)}`, schoolId: school.id },
     });
     const t = await prisma.teacher.upsert({
-      where: { userId: u.id },
-      update: {},
+      where: { employeeId: td.empId },
+      update: { userId: u.id, department: td.dept, qualification: td.qual },
       create: { userId: u.id, employeeId: td.empId, department: td.dept, qualification: td.qual },
     });
     teachers.push(t);
@@ -266,51 +266,69 @@ async function main() {
   const addresses   = ["MG Road","Gandhi Nagar","Nehru Street","Patel Colony","Lal Bagh","Civil Lines","Rajouri Garden","Karol Bagh","Connaught Place","Dwarka"];
 
   const allStudents: { id: string; classId: string; classKey: string; name: string }[] = [];
-  let stuCounter = 1;
 
-  for (const [classKey, cls] of Object.entries(classMap)) {
-    const classNum = parseInt(cls.name.match(/\d+/)?.[0] ?? "10");
-    for (let i = 0; i < 30; i++) {
-      const isMale = i < 15;
-      const firstName = isMale ? maleFirst[i] : femaleFirst[i - 15];
-      const lastName = lastNames[(stuCounter - 1) % lastNames.length];
-      const fullName = `${firstName} ${lastName}`;
-      const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${stuCounter}@student.gvss.edu.in`;
-      const stuId = `STU${String(stuCounter).padStart(4, "0")}`;
-      const birthYear = 2025 - (classNum + 5);
-      const dob = new Date(birthYear, rng(0, 11), rng(1, 28));
+  const existingStudentCount = await prisma.student.count({ where: { studentId: { startsWith: "STU" } } });
+  if (existingStudentCount >= 180) {
+    // Load existing students from DB grouped by class
+    console.log("  ↩ Students already present — loading from DB…");
+    const classKeys = Object.keys(classMap);
+    for (const classKey of classKeys) {
+      const cls = classMap[classKey];
+      const rows = await prisma.student.findMany({
+        where: { classId: cls.id },
+        include: { user: { select: { name: true } } },
+        orderBy: { studentId: "asc" },
+      });
+      for (const r of rows) {
+        allStudents.push({ id: r.id, classId: cls.id, classKey, name: r.user.name });
+      }
+    }
+  } else {
+    let stuCounter = 1;
+    for (const [classKey, cls] of Object.entries(classMap)) {
+      const classNum = parseInt(cls.name.match(/\d+/)?.[0] ?? "10");
+      for (let i = 0; i < 30; i++) {
+        const isMale = i < 15;
+        const firstName = isMale ? maleFirst[i] : femaleFirst[i - 15];
+        const lastName = lastNames[(stuCounter - 1) % lastNames.length];
+        const fullName = `${firstName} ${lastName}`;
+        const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${stuCounter}@student.gvss.edu.in`;
+        const stuId = `STU${String(stuCounter).padStart(4, "0")}`;
+        const birthYear = 2025 - (classNum + 5);
+        const dob = new Date(birthYear, rng(0, 11), rng(1, 28));
 
-      const u = await prisma.user.upsert({
-        where: { email },
-        update: {},
-        create: {
-          name: fullName, email, password: pw, role: UserRole.STUDENT,
-          phone: `+91-${rng(7000000000, 9999999999)}`,
-          address: `${rng(1, 999)} ${pick(addresses)}, New Delhi`,
-          schoolId: school.id,
-        },
-      });
-      const student = await prisma.student.upsert({
-        where: { userId: u.id },
-        update: {},
-        create: {
-          userId: u.id, studentId: stuId, classId: cls.id,
-          rollNumber: String(i + 1),
-          gender: isMale ? "Male" : "Female",
-          bloodGroup: pick(bloodGroups),
-          religion: pick(religions),
-          nationality: "Indian",
-          dateOfBirth: dob,
-          admissionDate: new Date("2025-04-01"),
-        },
-      });
-      await prisma.enrollment.upsert({
-        where: { studentId_academicYear: { studentId: student.id, academicYear: AY } },
-        update: {},
-        create: { studentId: student.id, classId: cls.id, academicYear: AY, rollNumber: String(i + 1), status: "ACTIVE" },
-      });
-      allStudents.push({ id: student.id, classId: cls.id, classKey, name: fullName });
-      stuCounter++;
+        const u = await prisma.user.upsert({
+          where: { email },
+          update: {},
+          create: {
+            name: fullName, email, password: pw, role: UserRole.STUDENT,
+            phone: `+91-${rng(7000000000, 9999999999)}`,
+            address: `${rng(1, 999)} ${pick(addresses)}, New Delhi`,
+            schoolId: school.id,
+          },
+        });
+        const student = await prisma.student.upsert({
+          where: { studentId: stuId },
+          update: { userId: u.id, classId: cls.id },
+          create: {
+            userId: u.id, studentId: stuId, classId: cls.id,
+            rollNumber: String(i + 1),
+            gender: isMale ? "Male" : "Female",
+            bloodGroup: pick(bloodGroups),
+            religion: pick(religions),
+            nationality: "Indian",
+            dateOfBirth: dob,
+            admissionDate: new Date("2025-04-01"),
+          },
+        });
+        await prisma.enrollment.upsert({
+          where: { studentId_academicYear: { studentId: student.id, academicYear: AY } },
+          update: {},
+          create: { studentId: student.id, classId: cls.id, academicYear: AY, rollNumber: String(i + 1), status: "ACTIVE" },
+        });
+        allStudents.push({ id: student.id, classId: cls.id, classKey, name: fullName });
+        stuCounter++;
+      }
     }
   }
 
@@ -318,22 +336,29 @@ async function main() {
   // 10. GUARDIANS + PARENT ACCOUNTS
   // ════════════════════════════════════════════════════════════════
   const occupations = ["Engineer","Doctor","Teacher","Businessman","Govt. Employee","Farmer","Lawyer","Banker","Architect","Professor"];
-  for (let i = 0; i < allStudents.length; i++) {
-    const s = allStudents[i];
-    const ln = s.name.split(" ").slice(1).join(" ");
-    const father = await prisma.guardian.create({
-      data: { name: `Mr. Ramesh ${ln}`, relation: "FATHER", phone: `+91-${rng(7000000000,9999999999)}`, email: `ramesh.${ln.toLowerCase().replace(/ /g,"")}.${i}@gmail.com`, occupation: pick(occupations), schoolId: school.id },
-    });
-    const mother = await prisma.guardian.create({
-      data: { name: `Mrs. Sunita ${ln}`, relation: "MOTHER", phone: `+91-${rng(7000000000,9999999999)}`, email: `sunita.${ln.toLowerCase().replace(/ /g,"")}.${i}@gmail.com`, occupation: pick(occupations), schoolId: school.id },
-    });
-    await prisma.studentGuardian.createMany({
-      data: [
-        { studentId: s.id, guardianId: father.id, isPrimary: true },
-        { studentId: s.id, guardianId: mother.id, isPrimary: false },
-      ],
-      skipDuplicates: true,
-    });
+  const existingGuardianCount = await prisma.guardian.count();
+  if (existingGuardianCount < allStudents.length * 2) {
+    for (let i = 0; i < allStudents.length; i++) {
+      const s = allStudents[i];
+      const ln = s.name.split(" ").slice(1).join(" ");
+      const fatherEmail = `ramesh.${ln.toLowerCase().replace(/ /g,"")}.${i}@gmail.com`;
+      const motherEmail = `sunita.${ln.toLowerCase().replace(/ /g,"")}.${i}@gmail.com`;
+      const existingF = await prisma.guardian.findFirst({ where: { email: fatherEmail } });
+      const father = existingF ?? await prisma.guardian.create({
+        data: { name: `Mr. Ramesh ${ln}`, relation: "FATHER", phone: `+91-${rng(7000000000,9999999999)}`, email: fatherEmail, occupation: pick(occupations), schoolId: school.id },
+      });
+      const existingM = await prisma.guardian.findFirst({ where: { email: motherEmail } });
+      const mother = existingM ?? await prisma.guardian.create({
+        data: { name: `Mrs. Sunita ${ln}`, relation: "MOTHER", phone: `+91-${rng(7000000000,9999999999)}`, email: motherEmail, occupation: pick(occupations), schoolId: school.id },
+      });
+      await prisma.studentGuardian.createMany({
+        data: [
+          { studentId: s.id, guardianId: father.id, isPrimary: true },
+          { studentId: s.id, guardianId: mother.id, isPrimary: false },
+        ],
+        skipDuplicates: true,
+      });
+    }
   }
 
   // Parent portal accounts (one per 3 students)

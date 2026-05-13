@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import fs from "fs/promises";
 import path from "path";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

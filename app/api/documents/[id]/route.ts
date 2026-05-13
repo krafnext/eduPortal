@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import fs from "fs/promises";
 import path from "path";
 
+export const dynamic = "force-dynamic";
+
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

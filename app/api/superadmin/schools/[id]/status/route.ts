@@ -3,6 +3,8 @@ import { requireSuperAdmin } from "@/lib/superadmin-guard";
 import { db } from "@/lib/db";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const schema = z.object({
   action: z.enum(["suspend", "activate"]),
 });

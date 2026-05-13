@@ -3,6 +3,8 @@ import { requireSuperAdmin } from "@/lib/superadmin-guard";
 import { db } from "@/lib/db";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const updateSchema = z.object({
   name: z.string().min(2).optional(),
   maxStudents: z.number().int().optional(),

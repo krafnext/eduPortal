@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 function isSchoolStaff(role: string) {
   return ["SCHOOL_ADMIN", "ADMIN", "STAFF"].includes(role);
 }

@@ -3,6 +3,8 @@ import { requireSuperAdmin } from "@/lib/superadmin-guard";
 import { db } from "@/lib/db";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const querySchema = z.object({
   page: z.coerce.number().min(1).default(1),
   pageSize: z.coerce.number().min(1).max(100).default(20),

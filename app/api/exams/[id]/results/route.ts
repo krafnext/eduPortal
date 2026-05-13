@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 function getGrade(pct: number): string {
   if (pct >= 90) return "A+";
   if (pct >= 80) return "A";

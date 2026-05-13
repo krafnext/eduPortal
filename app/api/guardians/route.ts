@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const createSchema = z.object({
   name: z.string().min(2),
   relation: z.string().default("GUARDIAN"),
