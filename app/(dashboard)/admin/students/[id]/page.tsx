@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +18,7 @@ async function getStudent(id: string) {
     include: {
       user: { select: { name: true, email: true, phone: true, address: true, isActive: true } },
       class: true,
+      parent: { include: { user: { select: { name: true, email: true } } } },
       guardians: {
         include: { guardian: true },
         orderBy: { isPrimary: "desc" },
@@ -160,6 +161,34 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                     </div>
                   ))}
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center gap-2 pb-3">
+              <KeyRound className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Parent Login</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {student.parent ? (
+                <div className="space-y-2 text-sm">
+                  <div className="flex flex-col gap-0.5 py-1 sm:flex-row sm:items-center">
+                    <span className="w-40 shrink-0 text-muted-foreground">Login Email</span>
+                    <span className="font-medium font-mono">{student.parent.user.email}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5 py-1 sm:flex-row sm:items-center">
+                    <span className="w-40 shrink-0 text-muted-foreground">Default Password</span>
+                    <span className="font-medium font-mono">Parent@123</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-1">
+                    Parent can log in at the school portal using the email above. Share the default password with the parent — they should change it after first login.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No parent login account yet. Add a guardian with an email address, then use <strong>Create Parent Logins</strong> from the Students list.
+                </p>
               )}
             </CardContent>
           </Card>

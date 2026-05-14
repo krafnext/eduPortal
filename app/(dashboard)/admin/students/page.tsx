@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Search, Plus, Upload, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Search, Plus, Upload, ChevronLeft, ChevronRight, Loader2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,8 @@ export default function StudentsPage() {
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<{ created: number; skipped: number } | null>(null);
 
   const search = searchParams.get("search") ?? "";
   const classId = searchParams.get("classId") ?? "";
@@ -102,6 +104,15 @@ export default function StudentsPage() {
     setLoading(false);
   }, [search, classId, status, page]);
 
+  async function handleMigrateParents() {
+    setMigrating(true);
+    setMigrateResult(null);
+    const res = await fetch("/api/admin/migrate-parents", { method: "POST" });
+    const data = await res.json();
+    setMigrateResult(data);
+    setMigrating(false);
+  }
+
   useEffect(() => {
     fetch("/api/classes")
       .then((r) => r.json())
@@ -124,7 +135,11 @@ export default function StudentsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Students</h1>
           <p className="text-sm text-muted-foreground">{total} students enrolled</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button type="button" variant="outline" onClick={handleMigrateParents} disabled={migrating}>
+            {migrating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Users className="mr-2 h-4 w-4" />}
+            {migrating ? "Creating parent logins…" : "Create Parent Logins"}
+          </Button>
           <Button variant="outline" asChild>
             <Link href="/admin/admissions/import">
               <Upload className="mr-2 h-4 w-4" />
@@ -139,6 +154,16 @@ export default function StudentsPage() {
           </Button>
         </div>
       </div>
+
+      {migrateResult && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 flex items-center justify-between">
+          <span>
+            Parent logins created: <strong>{migrateResult.created}</strong> &nbsp;·&nbsp;
+            Skipped (no email): <strong>{migrateResult.skipped}</strong>
+          </span>
+          <button onClick={() => setMigrateResult(null)} className="text-green-600 hover:text-green-800 font-medium text-xs">Dismiss</button>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="pb-3">

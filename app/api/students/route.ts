@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { findOrCreateParentAccount } from "@/lib/parent-account";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,7 @@ export async function GET(req: NextRequest) {
       },
       skip: (page - 1) * limit,
       take: limit,
-      orderBy: { createdAt: "desc" },
+      orderBy: { user: { name: "asc" } },
     }),
     db.student.count({ where }),
   ]);
@@ -189,6 +190,22 @@ export async function POST(req: NextRequest) {
         isPrimary: primaryContact === "MOTHER",
       },
     });
+  }
+
+  // Create parent login account from primary guardian's email
+  const primaryEmail = primaryContact === "MOTHER" ? motherEmail : fatherEmail;
+  const primaryName  = primaryContact === "MOTHER" ? motherName  : fatherName;
+  const primaryPhone = primaryContact === "MOTHER" ? motherPhone : fatherPhone;
+  if (primaryEmail && primaryName && session.user.schoolId) {
+    const parentId = await findOrCreateParentAccount({
+      email: primaryEmail,
+      name: primaryName,
+      phone: primaryPhone || "N/A",
+      schoolId: session.user.schoolId,
+    });
+    if (parentId) {
+      await db.student.update({ where: { id: student.id }, data: { parentId } });
+    }
   }
 
   // Create enrollment

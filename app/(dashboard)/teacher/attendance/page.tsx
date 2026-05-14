@@ -6,8 +6,30 @@ import { Loader2, Save } from "lucide-react";
 
 interface Student { id: string; studentId: string; user: { name: string }; rollNumber: string | null }
 interface ClassOption { id: string; name: string; section: string }
-
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+
+function sortStudents(list: Student[]) {
+  return [...list].sort((a, b) => {
+    const ra = parseInt(a.rollNumber ?? "");
+    const rb = parseInt(b.rollNumber ?? "");
+    if (!isNaN(ra) && !isNaN(rb)) return ra - rb;
+    return a.user.name.localeCompare(b.user.name);
+  });
+}
+
+function buildAttendanceMap(
+  students: Student[],
+  records: Array<{ studentId: string; status: string }>
+): Record<string, AttendanceStatus> {
+  const map: Record<string, AttendanceStatus> = {};
+  students.forEach((s) => { map[s.id] = "PRESENT"; });
+  if (Array.isArray(records)) {
+    records.forEach((r) => {
+      if (r.studentId in map) map[r.studentId] = r.status as AttendanceStatus;
+    });
+  }
+  return map;
+}
 
 export default function TeacherAttendancePage() {
   const [assignedClasses, setAssignedClasses] = useState<ClassOption[]>([]);
@@ -20,62 +42,45 @@ export default function TeacherAttendancePage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch teacher's assigned classes
   useEffect(() => {
     fetch("/api/teachers?current=true")
       .then((r) => r.json())
       .then((data) => {
-        if (data.assignedClasses && Array.isArray(data.assignedClasses)) {
+        if (data.assignedClasses?.length) {
           setAssignedClasses(data.assignedClasses);
-          if (data.assignedClasses.length > 0) {
-            setSelectedClass(data.assignedClasses[0].id);
-          }
+          setSelectedClass(data.assignedClasses[0].id);
         }
       })
-      .catch((err) => {
-        setError("Failed to load assigned classes");
-        console.error(err);
-      });
+      .catch(() => setError("Failed to load assigned classes"));
   }, []);
 
-  // Fetch students for selected class
+  // Reload students + existing attendance whenever class or date changes
   useEffect(() => {
     if (!selectedClass) return;
     setLoading(true);
+    setStudents([]);
+    setAttendance({});
     setError("");
-    fetch(`/api/students?classId=${selectedClass}&limit=100`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.students) {
-          setStudents(data.students);
-          const initial: Record<string, AttendanceStatus> = {};
-          data.students.forEach((s: Student) => {
-            initial[s.id] = "PRESENT";
-          });
-          setAttendance(initial);
-        } else {
-          setStudents([]);
-          setAttendance({});
-        }
-        setLoading(false);
+
+    Promise.all([
+      fetch(`/api/students?classId=${selectedClass}&limit=100`).then((r) => r.json()),
+      fetch(`/api/attendance?classId=${selectedClass}&date=${date}`).then((r) => r.json()),
+    ])
+      .then(([studentData, attendanceRecords]) => {
+        const sorted = sortStudents(studentData.students ?? []);
+        setStudents(sorted);
+        setAttendance(buildAttendanceMap(sorted, attendanceRecords));
       })
-      .catch((err) => {
-        setError("Failed to load students");
-        setStudents([]);
-        setLoading(false);
-        console.error(err);
-      });
-  }, [selectedClass]);
+      .catch(() => setError("Failed to load data"))
+      .finally(() => setLoading(false));
+  }, [selectedClass, date]);
 
   const setAll = (status: AttendanceStatus) => {
     setAttendance(Object.fromEntries(students.map((s) => [s.id, status])));
   };
 
   async function handleSave() {
-    if (!selectedClass) {
-      setError("Please select a class first");
-      return;
-    }
+    if (!selectedClass) { setError("Please select a class first"); return; }
     setSaving(true);
     setError("");
     const records = students.map((s) => ({ studentId: s.id, status: attendance[s.id] ?? "PRESENT" }));
@@ -92,9 +97,8 @@ export default function TeacherAttendancePage() {
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
       }
-    } catch (err) {
+    } catch {
       setError("Error saving attendance");
-      console.error(err);
     }
     setSaving(false);
   }
@@ -113,10 +117,7 @@ export default function TeacherAttendancePage() {
   };
 
   const counts = Object.values(attendance).reduce(
-    (acc, s) => {
-      acc[s] = (acc[s] ?? 0) + 1;
-      return acc;
-    },
+    (acc, s) => { acc[s] = (acc[s] ?? 0) + 1; return acc; },
     {} as Record<string, number>
   );
 
@@ -130,7 +131,7 @@ export default function TeacherAttendancePage() {
 
         {assignedClasses.length === 0 ? (
           <div className="card p-8 text-center text-gray-500">
-            <p>No classes assigned to you yet. Contact admin to get assigned to classes.</p>
+            No classes assigned to you yet. Contact admin to get assigned to classes.
           </div>
         ) : (
           <>
@@ -141,12 +142,11 @@ export default function TeacherAttendancePage() {
                   value={selectedClass}
                   onChange={(e) => setSelectedClass(e.target.value)}
                   className="input w-44"
+                  disabled={loading}
                 >
                   <option value="">Select class</option>
                   {assignedClasses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} ({c.section})
-                    </option>
+                    <option key={c.id} value={c.id}>{c.name} ({c.section})</option>
                   ))}
                 </select>
               </div>
@@ -157,17 +157,14 @@ export default function TeacherAttendancePage() {
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   className="input w-40"
+                  disabled={loading}
                 />
               </div>
-              {students.length > 0 && (
+              {students.length > 0 && !loading && (
                 <div className="flex gap-2 items-center ml-auto">
                   <span className="text-xs text-gray-500">Mark all:</span>
                   {(["PRESENT", "ABSENT", "LATE", "EXCUSED"] as AttendanceStatus[]).map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setAll(s)}
-                      className={`text-xs px-2 py-1 rounded ${statusColors[s]}`}
-                    >
+                    <button key={s} onClick={() => setAll(s)} className={`text-xs px-2 py-1 rounded ${statusColors[s]}`}>
                       {s}
                     </button>
                   ))}
@@ -175,14 +172,18 @@ export default function TeacherAttendancePage() {
               )}
             </div>
 
-            {students.length > 0 && (
+            {loading ? (
+              <div className="card p-12 flex flex-col items-center justify-center gap-3 text-gray-400">
+                <Loader2 className="w-8 h-8 animate-spin" />
+                <span className="text-sm">Loading attendance…</span>
+              </div>
+            ) : students.length === 0 ? (
+              <div className="card p-8 text-center text-gray-500">No students in this class yet.</div>
+            ) : (
               <>
                 <div className="flex gap-3 items-center flex-wrap">
                   {(Object.entries(counts) as [string, number][]).map(([status, count]) => (
-                    <span
-                      key={status}
-                      className={`badge ${statusColors[status as AttendanceStatus] ?? "bg-gray-100"}`}
-                    >
+                    <span key={status} className={`badge ${statusColors[status as AttendanceStatus] ?? "bg-gray-100"}`}>
                       {status}: {count}
                     </span>
                   ))}
@@ -199,35 +200,18 @@ export default function TeacherAttendancePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {loading && (
-                        <tr>
-                          <td colSpan={3} className="py-8 text-center">
-                            <Loader2 className="w-5 h-5 animate-spin inline text-gray-400" />
-                          </td>
-                        </tr>
-                      )}
                       {students.map((s) => {
                         const status = attendance[s.id] ?? "PRESENT";
                         return (
-                          <tr
-                            key={s.id}
-                            className={`hover:bg-gray-50 border-l-4 ${statusBorder[status]}`}
-                          >
+                          <tr key={s.id} className={`hover:bg-gray-50 border-l-4 ${statusBorder[status]}`}>
                             <td className="px-4 py-3 text-gray-500">{s.rollNumber ?? "—"}</td>
                             <td className="px-4 py-3 font-medium text-gray-800">{s.user.name}</td>
                             <td className="px-4 py-3">
                               <div className="flex gap-1">
-                                {(
-                                  ["PRESENT", "ABSENT", "LATE", "EXCUSED"] as AttendanceStatus[]
-                                ).map((opt) => (
+                                {(["PRESENT", "ABSENT", "LATE", "EXCUSED"] as AttendanceStatus[]).map((opt) => (
                                   <button
                                     key={opt}
-                                    onClick={() =>
-                                      setAttendance((a) => ({
-                                        ...a,
-                                        [s.id]: opt,
-                                      }))
-                                    }
+                                    onClick={() => setAttendance((a) => ({ ...a, [s.id]: opt }))}
                                     className={`text-xs px-2.5 py-1 rounded border font-medium transition ${
                                       status === opt
                                         ? statusColors[opt] + " border-transparent"
@@ -257,10 +241,6 @@ export default function TeacherAttendancePage() {
                   </button>
                 </div>
               </>
-            )}
-
-            {!loading && students.length === 0 && selectedClass && (
-              <div className="card p-8 text-center text-gray-500">No students in this class yet.</div>
             )}
           </>
         )}
